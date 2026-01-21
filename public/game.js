@@ -111,7 +111,7 @@ const LEVELS = [
 class GameScene extends Phaser.Scene {
     constructor() {
         super({ key: 'GameScene' });
-        this.currentLevel = 8;
+        this.currentLevel = 0;
         this.aimLine = null;
         this.totalStrokes = 0;
     }
