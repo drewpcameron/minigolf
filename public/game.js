@@ -2,6 +2,11 @@
 //Fix level 7
 //Make sure it works on a phone
 
+
+//Fix levels
+//fix colision
+//Reveal screen.
+
 // Welcome Screen Scene
 class TitleScene extends Phaser.Scene {
     constructor() {
@@ -79,33 +84,40 @@ class TitleScene extends Phaser.Scene {
             btnShape.strokeRoundedRect(btnX - 150, btnY - 40, 300, 80, 40);
             btnText.setScale(1);
         });
-
-        // 6. Footer Text
-        this.add.text(width / 2, height - 50, 'BY DREW & PARTNER', {
-            fontSize: '16px',
-            fill: '#ffffff',
-            alpha: 0.6
-        }).setOrigin(0.5);
     }
 }
 const LEVELS = [
     { ballPos: { x: 100, y: 1000 }, holePos: { x: 400, y: 150 }, walls: [{ x: 400, y: 600, w: 400, h: 20 }] }, // Hole 1: The Jump
-    { ballPos: { x: 400, y: 1000 }, holePos: { x: 400, y: 100 }, walls: [{ x: 200, y: 500, w: 20, h: 600 }, { x: 600, y: 500, w: 20, h: 600 }] }, // Hole 2: The Hallway
+    
+    // Hole 2: The Corridor - Forces a straight shot through a narrow vertical lane.
+    { ballPos: { x: 400, y: 1000 }, holePos: { x: 400, y: 100 }, walls: [{ x: 340, y: 550, w: 20, h: 700 }, { x: 460, y: 550, w: 20, h: 700 }] }, 
+    
     { ballPos: { x: 100, y: 1000 }, holePos: { x: 700, y: 100 }, walls: [{ x: 400, y: 400, w: 20, h: 800 }, { x: 400, y: 900, w: 500, h: 20 }] }, // Hole 3: Zig-Zag
     { ballPos: { x: 400, y: 1000 }, holePos: { x: 400, y: 200 }, walls: [{ x: 400, y: 500, w: 100, h: 100 }, { x: 200, y: 300, w: 200, h: 20 }, { x: 600, y: 300, w: 200, h: 20 }] }, // Hole 4: The Diamond
     { ballPos: { x: 700, y: 1000 }, holePos: { x: 100, y: 100 }, walls: [{ x: 0, y: 600, w: 1200, h: 20 }] }, // Hole 5: The Long Shot
-    { ballPos: { x: 100, y: 1000 }, holePos: { x: 700, y: 200 }, walls: [{ x: 300, y: 300, w: 20, h: 400 }, { x: 500, y: 800, w: 20, h: 400 }] }, // Hole 6: Splitter
-    { ballPos: { x: 400, y: 600 }, holePos: { x: 400, y: 100 }, walls: [{ x: 400, y: 400, w: 600, h: 20 }, { x: 100, y: 200, w: 20, h: 400 }, { x: 700, y: 200, w: 20, h: 400 }] }, // Hole 7: The Box
+    
+    // Hole 6: The Slalom - Requires two precise diagonal shots to clear offset pillars.
+    { ballPos: { x: 100, y: 1000 }, holePos: { x: 700, y: 200 }, walls: [{ x: 250, y: 700, w: 400, h: 20 }, { x: 550, y: 400, w: 400, h: 20 }] }, 
+    
+    // Hole 7: The Funnel - A wide entrance that narrows significantly near the hole. Move hole down to the bottom of the box
+    { ballPos: { x: 400, y: 900 }, holePos: { x: 400, y: 400 }, walls: [{ x: 250, y: 300, w: 20, h: 400 }, { x: 550, y: 300, w: 20, h: 400 }, { x: 400, y: 500, w: 300, h: 20 }] }, 
+    
     { ballPos: { x: 100, y: 1000 }, holePos: { x: 700, y: 1100 }, walls: [{ x: 400, y: 1100, w: 20, h: 200 }, { x: 400, y: 600, w: 800, h: 20 }] }, // Hole 8: The U-Turn
-    { ballPos: { x: 400, y: 1000 }, holePos: { x: 400, y: 100 }, walls: [] } // Hole 9: The Final Stretch
+    
+    // Hole 9: The Gauntlet - The final challenge. A central block with tiny gaps on the sides.
+    { ballPos: { x: 400, y: 1000 }, holePos: { x: 400, y: 100 }, walls: [{ x: 400, y: 550, w: 650, h: 40 }] } 
 ];
 
 class GameScene extends Phaser.Scene {
     constructor() {
         super({ key: 'GameScene' });
-        this.currentLevel = 0;
+        this.currentLevel = 8;
         this.aimLine = null;
         this.totalStrokes = 0;
+    }
+
+    preload() {
+        this.load.image('reveal-image', 'assets/baby_photo.jpg')
     }
 
     create() {
@@ -265,21 +277,65 @@ class GameScene extends Phaser.Scene {
     }
 
     triggerReveal() {
+        const { width, height } = this.scale;
+
+        // 1. Clean up the Game Screen
         this.ball.setVisible(false);
         this.ballGlow.setVisible(false);
-        const { width, height } = this.scale;
+        this.hole.setVisible(false);
+        this.barriers.clear(true, true); // Removes all walls
+        this.levelText.setVisible(false);
+        this.scoreText.setVisible(false);
+
+        // 2. Create a "Clean Slate" Background
+        const cleanBG = this.add.graphics();
+        cleanBG.fillGradientStyle(0x00050a, 0x00050a, 0x011627, 0x011627, 1);
+        cleanBG.fillRect(0, 0, width, height);
+        cleanBG.setDepth(10); // Bring to front
+
+        // 3. Victory Heading
+        const header = this.add.text(width / 2, height * 0.15, 'MISSION COMPLETE', { 
+            fontSize: '42px', fill: '#ffffff', fontFamily: 'Arial Black' 
+        }).setOrigin(0.5).setDepth(11);
+
+        // 4. The Big Message (Cyan for Boy)
+        const resultColor = '#00ffff'; 
+        const resultText = "IT'S A BOY!"; 
+
+        const revealText = this.add.text(width / 2, height * 0.25, resultText, { 
+            fontSize: '90px', fill: resultColor, fontFamily: 'Arial Black' 
+        }).setOrigin(0.5).setShadow(0, 0, resultColor, 20, true, true).setDepth(11);
+
+        // 5. IMAGE PLACEHOLDER (Centered)
+        const imageY = height * 0.55;
+        const revealImage = this.add.image(width / 2, imageY, 'reveal-image').setDepth(11);
         
-        this.add.text(width / 2, height / 2 - 50, 'GENDER REVEAL!', { 
-            fontSize: '64px', fill: '#00ffff', fontFamily: 'Arial Black' 
-        }).setOrigin(0.5).setShadow(0, 0, '#00ffff', 10, true, true);
+        if (!this.textures.exists('reveal-image')) {
+            const box = this.add.graphics().setDepth(11);
+            box.lineStyle(6, resultColor, 1);
+            box.strokeRoundedRect(width / 2 - 200, imageY - 200, 400, 400, 20);
+            
+            this.add.text(width / 2, imageY, 'PLACE PHOTO HERE', { 
+                fontSize: '24px', fill: '#ffffff', fontFamily: 'Arial' 
+            }).setOrigin(0.5).setDepth(11);
+        } else {
+            // This scales your photo to fit nicely in the center
+            revealImage.setDisplaySize(500, 500); 
+        }
 
-        // Change this color based on your reveal!
-        const resultColor = '#ff00ff'; // Pink for Girl, #00ffff for Boy
-        const resultText = 'IT\'S A GIRL!'; 
+        // 6. Final Stats Footer
+        this.add.text(width / 2, height * 0.85, `TOTAL STROKES: ${this.totalStrokes}`, { 
+            fontSize: '32px', fill: '#ffffff', fontFamily: 'Arial Black' 
+        }).setOrigin(0.5).setDepth(11);
 
-        this.add.text(width / 2, height / 2 + 50, resultText, { 
-            fontSize: '82px', fill: resultColor, fontFamily: 'Arial Black' 
-        }).setOrigin(0.5).setShadow(0, 0, resultColor, 20, true, true);
+        // Optional: Add a simple "Play Again" button
+        const restartBtn = this.add.text(width / 2, height * 0.92, 'RESTART', { 
+            fontSize: '24px', fill: resultColor, backgroundColor: '#000000', padding: 10
+        })
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true })
+        .setDepth(11)
+        .on('pointerup', () => window.location.reload());
     }
 }
 
@@ -288,7 +344,8 @@ const config = {
     type: Phaser.AUTO,
     parent: 'game-container',
     scene: [TitleScene, GameScene], 
-
+    pixelArt: false,
+    roundPixels: true,
     scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,  
