@@ -275,68 +275,140 @@ class GameScene extends Phaser.Scene {
             this.triggerReveal();
         }
     }
+async triggerReveal() {
+    const { width, height } = this.scale;
 
-    triggerReveal() {
-        const { width, height } = this.scale;
+    // 1. Clean up the Game Screen
+    this.ball.setVisible(false);
+    this.ballGlow.setVisible(false);
+    this.hole.setVisible(false);
+    this.barriers.clear(true, true);
+    this.levelText.setVisible(false);
+    this.scoreText.setVisible(false);
 
-        // 1. Clean up the Game Screen
-        this.ball.setVisible(false);
-        this.ballGlow.setVisible(false);
-        this.hole.setVisible(false);
-        this.barriers.clear(true, true); // Removes all walls
-        this.levelText.setVisible(false);
-        this.scoreText.setVisible(false);
+    // 2. Create a "Clean Slate" Background
+    const cleanBG = this.add.graphics();
+    cleanBG.fillGradientStyle(0x00050a, 0x00050a, 0x011627, 0x011627, 1);
+    cleanBG.fillRect(0, 0, width, height);
+    cleanBG.setDepth(10);
 
-        // 2. Create a "Clean Slate" Background
-        const cleanBG = this.add.graphics();
-        cleanBG.fillGradientStyle(0x00050a, 0x00050a, 0x011627, 0x011627, 1);
-        cleanBG.fillRect(0, 0, width, height);
-        cleanBG.setDepth(10); // Bring to front
+    // 3. Victory Heading
+    this.add.text(width / 2, height * 0.1, 'MISSION COMPLETE', { 
+        fontSize: '32px', fill: '#ffffff', fontFamily: 'Arial Black' 
+    }).setOrigin(0.5).setDepth(11);
 
-        // 3. Victory Heading
-        const header = this.add.text(width / 2, height * 0.15, 'MISSION COMPLETE', { 
-            fontSize: '42px', fill: '#ffffff', fontFamily: 'Arial Black' 
-        }).setOrigin(0.5).setDepth(11);
+    // 4. Sharp "IT'S A BOY!" Text
+    const resultColor = '#00ffff'; 
+    const revealText = this.add.text(width / 2, height * 0.18, "IT'S A BOY!", { 
+        fontSize: '90px', 
+        fill: '#ffffff', 
+        fontFamily: 'Arial Black',
+        stroke: resultColor,
+        strokeThickness: 8
+    }).setOrigin(0.5).setShadow(0, 0, resultColor, 20, true, true).setDepth(11);
 
-        // 4. The Big Message (Cyan for Boy)
-        const resultColor = '#00ffff'; 
-        const resultText = "IT'S A BOY!"; 
-
-        const revealText = this.add.text(width / 2, height * 0.25, resultText, { 
-            fontSize: '90px', fill: resultColor, fontFamily: 'Arial Black' 
-        }).setOrigin(0.5).setShadow(0, 0, resultColor, 20, true, true).setDepth(11);
-
-        // 5. IMAGE PLACEHOLDER (Centered)
-        const imageY = height * 0.55;
+    // 5. Image Display
+    const imageY = height * 0.42;
+    if (this.textures.exists('reveal-image')) {
         const revealImage = this.add.image(width / 2, imageY, 'reveal-image').setDepth(11);
-        
-        if (!this.textures.exists('reveal-image')) {
-            const box = this.add.graphics().setDepth(11);
-            box.lineStyle(6, resultColor, 1);
-            box.strokeRoundedRect(width / 2 - 200, imageY - 200, 400, 400, 20);
-            
-            this.add.text(width / 2, imageY, 'PLACE PHOTO HERE', { 
-                fontSize: '24px', fill: '#ffffff', fontFamily: 'Arial' 
-            }).setOrigin(0.5).setDepth(11);
-        } else {
-            // This scales your photo to fit nicely in the center
-            revealImage.setDisplaySize(500, 500); 
+        revealImage.setDisplaySize(400, 400); 
+    } else {
+        const box = this.add.graphics().setDepth(11);
+        box.lineStyle(4, resultColor, 1);
+        box.strokeRoundedRect(width / 2 - 150, imageY - 150, 300, 300, 20);
+    }
+
+    // 6. Arcade Name Input (3 Letters)
+    const inputY = height * 0.68;
+    const instruction = this.add.text(width / 2, inputY - 40, "ENTER INITIALS", {
+        fontSize: '24px', fill: '#ff00ff', fontFamily: 'Arial Black'
+    }).setOrigin(0.5).setDepth(11);
+
+    const nameDisplay = this.add.text(width / 2, inputY + 10, "___", {
+        fontSize: '60px', fill: '#ffffff', fontFamily: 'Arial Black'
+    }).setOrigin(0.5).setDepth(11);
+
+    let initials = "";
+
+    // Input Logic Function
+    const handleInput = async (char) => {
+        if (char === "BACKSPACE") {
+            initials = initials.slice(0, -1);
+        } else if (initials.length < 3) {
+            initials += char.toUpperCase();
         }
 
-        // 6. Final Stats Footer
-        this.add.text(width / 2, height * 0.85, `TOTAL STROKES: ${this.totalStrokes}`, { 
-            fontSize: '32px', fill: '#ffffff', fontFamily: 'Arial Black' 
-        }).setOrigin(0.5).setDepth(11);
+        nameDisplay.setText(initials.padEnd(3, "_"));
 
-        // Optional: Add a simple "Play Again" button
-        const restartBtn = this.add.text(width / 2, height * 0.92, 'RESTART', { 
-            fontSize: '24px', fill: resultColor, backgroundColor: '#000000', padding: 10
-        })
-        .setOrigin(0.5)
-        .setInteractive({ useHandCursor: true })
-        .setDepth(11)
-        .on('pointerup', () => window.location.reload());
-    }
+        if (initials.length === 3) {
+            // Stop listening
+            window.removeEventListener('keydown', keyHandler);
+            instruction.setText("SAVING SCORE...");
+            
+            try {
+                // Save to server
+                await fetch('/save-score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: initials, score: this.totalStrokes })
+                });
+
+                // Get Leaderboard
+                const resp = await fetch('/get-leaderboard');
+                const leaderboardData = await resp.json();
+
+                // Hide input, show leaderboard
+                instruction.setVisible(false);
+                nameDisplay.setVisible(false);
+                this.drawLeaderboard(leaderboardData);
+
+            } catch (e) {
+                console.error("Save failed", e);
+                instruction.setText("SAVE FAILED");
+            }
+        }
+    };
+
+    // Keyboard Listener
+    const keyHandler = (e) => {
+        if (e.key === "Backspace") handleInput("BACKSPACE");
+        else if (e.key.match(/^[a-z]$/i)) handleInput(e.key);
+    };
+    window.addEventListener('keydown', keyHandler);
+
+    // Mobile Fallback: Simple prompt if they tap the nameDisplay
+    nameDisplay.setInteractive().on('pointerup', () => {
+        const entry = prompt("Enter 3 Initials:");
+        if (entry) {
+            initials = entry.substring(0, 3).toUpperCase();
+            handleInput(""); // Trigger the length check
+        }
+    });
+}
+
+// Helper function to draw the list
+drawLeaderboard(data) {
+    const { width, height } = this.scale;
+    const startY = height * 0.68;
+
+    this.add.text(width / 2, startY - 30, "COSMIC TOP 10", {
+        fontSize: '28px', fill: '#ff00ff', fontFamily: 'Arial Black'
+    }).setOrigin(0.5).setDepth(11);
+
+    data.forEach((entry, index) => {
+        this.add.text(width / 2, startY + 20 + (index * 32), 
+            `${index + 1}. ${entry.name}   ${entry.score}`, {
+            fontSize: '22px', fill: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(11);
+    });
+
+    // Final Restart Button at the very bottom
+    this.add.text(width / 2, height * 0.95, 'REPLAY', { 
+        fontSize: '20px', fill: '#00ffff', backgroundColor: '#000000', padding: 10
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setDepth(11)
+      .on('pointerup', () => window.location.reload());
+}
+
 }
 
 // Game Configuration
